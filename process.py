@@ -1,7 +1,8 @@
 from typing import Dict
 
 import SimpleITK as sitk
-# import torch
+import torch
+import os
 import numpy as np
 
 from base_algorithm import BaseSynthradAlgorithm
@@ -16,6 +17,9 @@ class SynthradAlgorithm(BaseSynthradAlgorithm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        model_path = os.path.join(os.path.dirname(__file__), 'synthrad_model.pt')
+        self.model = torch.load(model_path)
+        self.model.eval()
 
     def predict(self, input_dict: Dict[str, sitk.Image]) -> sitk.Image:
         """
@@ -49,30 +53,21 @@ class SynthradAlgorithm(BaseSynthradAlgorithm):
         mr_np = sitk.GetArrayFromImage(mr_sitk).astype("float32")
 
 
+        if 'head' in region.lower():
+            region_cond_np = np.ones_like(x_input)
+        else:
+            region_cond_np = -1 * np.ones_like(x_input)
+        region_cond_np *= mask_np
 
-        # NOTE: To test using pytorch, uncomment the following lines and comment the lines below
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print("Using device: ", device)
 
-        ## check if GPU is available
-        # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        # print("Using device: ", device)
+        x_input = torch.Tensor(np.stack([mr_np, mask_np, region_cond_np], axis=0), device=device)
 
-        ## convert np arrays to tensors
-        # mr_tensor = torch.tensor(mr_np, device=device)
-        # mask_tensor = torch.tensor(mask_np, device=device)
+        output = self.model.predict(x_input)
 
-        ## sCT generation placeholder (set values inside mask to 0)
-        # mr_tensor[mask_tensor == 1] = 0
-        # mr_tensor[mask_tensor == 0] = -1000
-
-        ## convert tensor back to np array
-        # sCT = mr_tensor.cpu().numpy()
-
-        
-        # NOTE: Comment the following lines if using pytorch
-        sCT = np.zeros(mr_np.shape)
-        sCT[mask_np == 1] = 0
-        sCT[mask_np == 0] = -1000
-
+        # convert tensor back to np array
+        sCT = output.cpu().numpy()
 
         sCT_sitk = sitk.GetImageFromArray(sCT)
         sCT_sitk.CopyInformation(mr_sitk)
