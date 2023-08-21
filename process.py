@@ -18,7 +18,9 @@ class SynthradAlgorithm(BaseSynthradAlgorithm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         model_path = os.path.join(os.path.dirname(__file__), 'synthrad_model.pt')
-        self.model = torch.load(model_path)
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.model = torch.load(model_path, map_location=self.device)
         self.model.eval()
 
     def predict(self, input_dict: Dict[str, sitk.Image]) -> sitk.Image:
@@ -59,10 +61,9 @@ class SynthradAlgorithm(BaseSynthradAlgorithm):
             region_cond_np = -1 * np.ones_like(x_input)
         region_cond_np *= mask_np
 
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print("Using device: ", device)
+        print("Using device: ", self.device)
 
-        x_input = torch.Tensor(np.stack([mr_np, mask_np, region_cond_np], axis=0), device=device)
+        x_input = torch.Tensor(np.stack([mr_np, mask_np, region_cond_np], axis=0), device=self.device)
 
         output = self.model.predict(x_input)
 
